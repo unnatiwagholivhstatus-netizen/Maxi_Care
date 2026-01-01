@@ -1,20 +1,3 @@
-"""
-Unnati Motors Maxi Care Dashboard - Render Ready (app.py)
-
-What is added/changed for Render:
-1) Reads Excel paths from environment variables (LABOUR_FILE, SPARES_FILE).
-   - Default: files in same folder as app.py (Render path: /opt/render/project/src)
-2) If Excel not found, app will still run but APIs will return empty results.
-3) Keeps your original logic and UI; only path loading is made Render-safe.
-4) Export sheets included:
-   - Labour export: Complete Details, Month-wise Summary, Division Summary, Labour Description
-   - Spares export: Complete Details, Month-wise Summary, Division Summary, Part Desc Wise
-
-Note:
-- Keep "Maxi Labour.xlsx" and "Maxi Spares.xlsx" in repo root (same folder as app.py) OR set env vars.
-- Python 3.12.10 compatible.
-"""
-
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -43,7 +26,7 @@ if not SPARES_FILE.exists():
         SPARES_FILE = win_fallback
 
 APP_NAME = "Unnati Motors Maxi Care Dashboard"
-APP_PORT = int(os.getenv("PORT", "8000"))  # Render provides PORT
+APP_PORT = int(os.getenv("PORT", "8000"))
 
 MONTH_NAMES = {
     1: "Jan", 2: "Feb", 3: "Mar", 4: "Apr", 5: "May", 6: "Jun",
@@ -67,7 +50,7 @@ def load_data():
     try:
         print(f"Loading Labour file: {LABOUR_FILE}")
         if LABOUR_FILE.exists():
-            labour_df_local = pd.read_excel(LABOUR_FILE)
+            labour_df_local = pd.read_excel(LABOUR_FILE, engine='openpyxl')
             labour_df_local["Bill Date"] = pd.to_datetime(labour_df_local.get("Bill Date"), errors="coerce")
             print(f"   Loaded {len(labour_df_local)} labour records")
         else:
@@ -76,7 +59,7 @@ def load_data():
 
         print(f"Loading Spares file: {SPARES_FILE}")
         if SPARES_FILE.exists():
-            spares_df_local = pd.read_excel(SPARES_FILE)
+            spares_df_local = pd.read_excel(SPARES_FILE, engine='openpyxl')
             spares_df_local["Doc Date"] = pd.to_datetime(spares_df_local.get("Doc Date"), errors="coerce")
             print(f"   Loaded {len(spares_df_local)} spares records")
         else:
@@ -86,6 +69,8 @@ def load_data():
         return labour_df_local, spares_df_local
     except Exception as e:
         print(f"ERROR loading files: {e}")
+        import traceback
+        traceback.print_exc()
         return pd.DataFrame(), pd.DataFrame()
 
 
@@ -572,7 +557,6 @@ def export_labour_data(division: str = None, month: str = None, advisor: str = N
 
         div_summary_df = pd.DataFrame(div_summary)
 
-        # EXTRA SHEET: Labour Description (Count / Without Tax / With Tax) based on current filtered data
         labour_desc_df = pd.DataFrame()
         if "Labour Description" in filtered.columns:
             agg_map = {}
@@ -718,7 +702,6 @@ def export_spares_data(division: str = None, month: str = None, advisor: str = N
 
         div_summary_df = pd.DataFrame(div_summary)
 
-        # EXTRA SHEET: Part Desc Wise (Spare Count / NDP / Selling / MRP) based on current filtered data
         part_desc_df = pd.DataFrame()
         if not filtered.empty and "Part Desc" in filtered.columns:
             temp = filtered.copy()
@@ -1493,6 +1476,26 @@ HTML_CONTENT = """
 @app.get("/", response_class=HTMLResponse)
 def serve_dashboard():
     return HTML_CONTENT
+
+
+@app.on_event("startup")
+def startup_event():
+    print("\n" + "=" * 80)
+    print("UNNATI MOTORS MAXI CARE DASHBOARD - RENDER READY")
+    print("=" * 80)
+
+    print("\nPaths:")
+    print(f"   Labour: {LABOUR_FILE}")
+    print(f"   Spares: {SPARES_FILE}")
+
+    print("\nData Loaded:")
+    print(f"   Labour: {len(labour_df):,} records" if not labour_df.empty else "   Labour: 0 records")
+    print(f"   Spares: {len(spares_df):,} records" if not spares_df.empty else "   Spares: 0 records")
+
+    print("\nDashboard Running:")
+    print(f"   http://0.0.0.0:{APP_PORT}")
+    print("\nPress Ctrl+C to stop")
+    print("=" * 80 + "\n")
 
 
 if __name__ == "__main__":
